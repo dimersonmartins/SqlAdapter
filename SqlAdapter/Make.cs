@@ -1,16 +1,35 @@
-﻿using SqlAdapter.Migrations;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Text;
 
-namespace SqlAdapter
+namespace SqlAdapter.Migrations
 {
-    public class Build : Access
+    public class Make : Access
     {
-
-        private List<Schema> _schemas_create = new List<Schema>();
-        private List<Schema> _schemas_update = new List<Schema>();
+        public Make()
+        {
+            register_schemas_create.Add(new Migrations.Migrate().Schema());
+            register_schemas_update.Add(new Migrations.Migrate().Schema());
+        }
+        /// <summary>
+        /// schemas_create => Models a serem migradas
+        /// </summary>
+        public List<Schema> register_schemas_create = new List<Schema>();
+        /// <summary>
+        /// schemas_update => Models a serem atualizadas
+        /// </summary>
+        public List<Schema> register_schemas_update = new List<Schema>();
+        /// <summary>
+        /// Conexão com o banco de dados
+        /// </summary>
+        public string ConnectionString {
+            set 
+            {
+                base.ConnectionString = value;
+            } 
+        }
 
         private string TableName { get; set; }
 
@@ -18,23 +37,13 @@ namespace SqlAdapter
         public string PathProcedures { get; set; }
 
         private string Columns { get; set; }
+        private string Create_Indexs { get; set; }
         private string ColumnName { get; set; }
+        private string SeederName { get; set; }
 
         private string Properties { get; set; }
 
         private bool IsUpdate { get; set; }
-
-        /// <summary>
-        /// schemas_create => Models a serem migradas
-        /// schemas_update => MOdels a serem atualizadas
-        /// ConnectionString => Conexão com o banco de dados
-        /// </summary>
-        public void Register(List<Schema> schemas_create, List<Schema> schemas_update, string ConnectionString)
-        {
-            base.ConnectionString   = ConnectionString;
-            _schemas_create         = schemas_create;
-            _schemas_update         = schemas_update;
-        }
 
         /// <summary>
         /// Cria as tabelas na base de dados
@@ -42,9 +51,9 @@ namespace SqlAdapter
         public void Create()
         {
             IsUpdate = false;
-            for (int i = 0; i < _schemas_create.Count; i++)
+            for (int i = 0; i < register_schemas_create.Count; i++)
             {
-                TableName = _schemas_create[i].fields[0].table;
+                TableName = register_schemas_create[i].fields[0].table;
 
                 if (HasTable())
                 {
@@ -55,7 +64,7 @@ namespace SqlAdapter
 
                 Properties += Constants.CREATE_TABLE + TableName + Constants.START_PARENTHESIS;
 
-                MouthedLine(_schemas_create[i].fields);
+                MouthedLine(register_schemas_create[i].fields);
 
                 Properties += Columns;
 
@@ -63,6 +72,11 @@ namespace SqlAdapter
 
                 base.Execute(Properties);
                 InsertMigrate();
+
+                if (!string.IsNullOrWhiteSpace(Create_Indexs))
+                {
+                    CreateIndexs(register_schemas_create[i].fields);
+                }
 
                 Console.WriteLine("Query: " + Properties);
                 Console.WriteLine();
@@ -74,16 +88,20 @@ namespace SqlAdapter
         public void Update()
         {
             IsUpdate = true;
-            for (int i = 0; i < _schemas_update.Count; i++)
+            for (int i = 0; i < register_schemas_update.Count; i++)
             {
-                TableName = _schemas_update[i].fields[0].table;
+                TableName = register_schemas_update[i].fields[0].table;
 
                 Properties = string.Empty;
 
                 Properties += Constants.UPDATE_TABLE + TableName + Constants.SPACE + Constants.ADD_COLUMNS;
 
-                MouthedLine(_schemas_update[i].fields);
-
+                MouthedLine(register_schemas_update[i].fields);
+                if (string.IsNullOrWhiteSpace(Columns))
+                {
+                    Console.WriteLine("Não há alterações na tabela: " + TableName);
+                    continue;
+                }
                 Properties += Columns;
 
                 Console.WriteLine("Atualizando tabela: " + TableName);
@@ -91,49 +109,128 @@ namespace SqlAdapter
                 base.Execute(Properties);
                 InsertMigrate();
 
+
+                if (!string.IsNullOrWhiteSpace(Create_Indexs))
+                {
+                    CreateIndexs(register_schemas_update[i].fields);
+                }
+
+
                 Console.WriteLine("Query: " + Properties);
                 Console.WriteLine();
             }
         }
 
         /// <summary>
-        /// Atualiza as tabelas na base de dados
+        /// Criação das Procedures
         /// </summary>
         public void CreateProcedures()
         {
-            foreach (string fullPath in Directory.GetFiles(PathProcedures + "Models", "*.SQL", SearchOption.AllDirectories)) // add para procurar em subDiretorios - SearchOption.AllDirectories
+            foreach (string fullPath in Directory.GetFiles(PathProcedures, "*.sql", SearchOption.AllDirectories)) // add para procurar em subDiretorios - SearchOption.AllDirectories
             {
-                Procedure = Path.GetFileName(fullPath);
-
-                if (HasProcedure() || !PathProcedures.Contains(".SQL"))
+                try
                 {
+                    string fileName = Path.GetFileName(fullPath);
+                    Console.WriteLine("Abrindo o Arquivo: " + Path.GetFileName(fileName));
+
+                    if (!fileName.Contains(".sql"))
+                    {
+                        continue;
+                    }
+
+                    string scriptProcedure = File.ReadAllText(fullPath, Encoding.Default);
+
+                    Procedure = Between(scriptProcedure, "--NAME{", "}");
+
+                    if (Procedure == "SEEDER")
+                    {
+                        continue;
+                    }
+
+                    HasProcedure();
+
+                    Console.WriteLine("Criando Procedure: " + Procedure);
+                    base.ExecuteProcedure(scriptProcedure);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
                     continue;
                 }
-
-                string scriptProcedure = File.ReadAllText(PathProcedures);
-
-                Console.WriteLine("Script: " + scriptProcedure);
-                Console.WriteLine("Criando Procedure: " + Procedure);
                
-                base.Execute(scriptProcedure);
             }
 
         }
 
-        private bool HasProcedure()
+        /// <summary>
+        /// Semeador de tabelas
+        /// </summary>
+        public void Seeder()
         {
-            DataSet ds = base.Query(Constants.START_EXIST_PROCEDURE
-                    + Procedure.Replace(".SQL","")
-                    + Constants.END_EXIST_PROCEDURE);
-
-            if (ds != null && ds.Tables != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+            foreach (string fullPath in Directory.GetFiles(PathProcedures, "*.sql", SearchOption.AllDirectories)) // add para procurar em subDiretorios - SearchOption.AllDirectories
             {
-                if (ds.Tables[0].Rows[0].Field<int>("response") > 0)
+                try
                 {
-                    return true;
+                    string fileName = Path.GetFileName(fullPath);
+                    if (!fileName.Contains(".sql"))
+                    {
+                        continue;
+                    }
+
+                    string scriptSeeder = File.ReadAllText(fullPath, Encoding.Default);
+
+                    SeederName = Between(scriptSeeder, "--NAME{", "}");
+                    if (SeederName != "SEEDER")
+                    {
+                        continue;
+                    }
+
+
+                    Console.WriteLine("Abrindo o Arquivo: " + fileName);
+
+                    Console.WriteLine("Semeando...");
+                    base.Execute(scriptSeeder);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    continue;
+                }
+               
+            }
+
+        }
+
+        private void CreateIndexs(List<Field> schemas)
+        {
+            foreach (var reg in schemas)
+            {
+                string NULLABLE = string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(reg.create_index))
+                {
+                    base.ExecuteProcedure(@"CREATE INDEX "+ reg.create_index.ToLower() + " ON " + TableName + " ("+ reg.name.ToLower() + ")");
                 }
             }
-            return false;
+        }
+
+        public string Between(string STR, string FirstString, string LastString)
+        {
+            string FinalString;
+            int Pos1 = STR.IndexOf(FirstString) + FirstString.Length;
+            int Pos2 = STR.IndexOf(LastString);
+            FinalString = STR.Substring(Pos1, Pos2 - Pos1);
+            return FinalString;
+        }
+
+        private void HasProcedure()
+        {
+           base.Execute(Constants.START_EXIST_PROCEDURE
+                    + Procedure
+                    + Constants.MEIO_EXIST_PROCEDURE
+                    + Constants.END_EXIST_DROP_PROCEDURE
+                    + Procedure
+                    + Constants.END_EXIST_PROCEDURE);
         }
 
         private bool HasTable()
@@ -245,8 +342,12 @@ namespace SqlAdapter
                 {
                     NULLABLE = Constants.NOTNULL;
                 }
-                
-              
+
+
+                if (!string.IsNullOrWhiteSpace(reg.create_index))
+                {
+                    Create_Indexs = reg.create_index + Constants.COMMA;
+                }
 
                 if (ColumnName == Constants.ID)
                 {

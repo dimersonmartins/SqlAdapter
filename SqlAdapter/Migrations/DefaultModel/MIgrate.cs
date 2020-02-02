@@ -1,4 +1,8 @@
-﻿namespace SqlAdapter.Migrations.DefaultModel
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace SqlAdapter.Migrations
 {
     public class Migrate
     {

@@ -39,14 +39,11 @@
                                               SELECT response = 0
                                             END";
 
-        public const string START_EXIST_PROCEDURE = @"IF(EXISTS(SELECT * FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME = '";
-        public const string END_EXIST_PROCEDURE = @"'))
-                                                 BEGIN
-	                                                SELECT response = 1
-                                                 END
-                                                ELSE
-                                                 BEGIN
-                                                 SELECT response = 0
-                                                 END";
+        public const string START_EXIST_PROCEDURE = @"IF EXISTS(SELECT * FROM sys.objects WHERE type = 'P' AND name = '";
+        public const string MEIO_EXIST_PROCEDURE = @"')
+                                                    BEGIN " ;
+        public const string END_EXIST_DROP_PROCEDURE  =       "DROP PROCEDURE ";
+        public const string END_EXIST_PROCEDURE       =   " END";
+
     }
 }
