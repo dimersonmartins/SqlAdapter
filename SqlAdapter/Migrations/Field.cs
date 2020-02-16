@@ -2,6 +2,7 @@
 {
     public class Field
     {
+
         public string table { get; set; }
 
         public string name { get; set; }

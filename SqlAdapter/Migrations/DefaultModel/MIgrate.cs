@@ -8,10 +8,9 @@ namespace SqlAdapter.Migrations
     {
         public Schema Schema()
         {
-            Schema schema = new Schema();
+            Schema schema = new Schema("migrations");
             schema.Add(new Field()
             {
-                table = "migrations",
                 name = "id",
                 type = "BIGINT",
                 nullable = false
@@ -19,7 +18,6 @@ namespace SqlAdapter.Migrations
 
             schema.Add(new Field()
             {
-                table = "migrations",
                 name = "name",
                 type = "VARCHAR(255)",
                 nullable = false
@@ -27,7 +25,6 @@ namespace SqlAdapter.Migrations
 
             schema.Add(new Field()
             {
-                table = "migrations",
                 name = "created_at",
                 type = "DATETIME",
                 nullable = false
@@ -35,7 +32,6 @@ namespace SqlAdapter.Migrations
 
             schema.Add(new Field()
             {
-                table = "migrations",
                 name = "updated_at",
                 type = "DATETIME",
                 nullable = false
